@@ -1,0 +1,318 @@
+---
+title: "Final Paper"
+author: "Qingwei Li"
+date: "12/3/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggpubr)
+library(modelr)
+library(broom)
+library(kableExtra)
+```
+
+# INTRODUCTION
+
+Following an investigation of data sets online, I decided to explore Men’s D1 College Basketball Data between the years 2013-2021. This data was very interesting to me since I attend a competitive NCAA D1 Basketball school, like UNC. I found that the results from this information could benefit teams for where they need to improve between given years. In addition, this information could provide projectability for the team's future seasons which could help them realize if they need to improve their recruiting class or even for new recruits to choose teams that have better-projected futures than who they are currently committed to.  
+
+The first question that I posed about the College Basketball data was “Is offensive efficiency or defensive efficiency a better predictor of wins above bubble?” This is important to all college basketball teams when they choose to focus more on offensive or defensive schemes when preparing for games. In addition, this information could be useful to coaches when they choose what to focus on at practices as certain teams may be strong on either defense or offense and need to improve in the other. I chose to base this question on wins above bubble versus other variables like win rate to reduce variability and compare teams more fairly since wins above bubble reduces variability between different schedule difficulties.  
+
+The second question that I posed was “Which variables produce the best predictive model for win rate without using offensive and defensive efficiencies?” After researching the first question, I found that the efficiencies were great predictors of how well a team would perform during the season. However, it would be more helpful for coaches to look at a model without the inclusion of efficiencies so they could more accurately narrow down what their team should improve at. This question used a lot of different variables and used a stepwise model on them to narrow down which variables were the most important to win rate for teams. This model originally started with 17 variables and the model narrowed down those into the 8 most impactful on win rate. This helps teams understand where they should focus most in both practices and games to impact their win rate the most.  
+
+Following the exploration of these two questions, teams may find interesting information that they can use going forward when preparing for the season. Teams may focus on specific skills that correlate greater to win rate and wins above bubble or focus on offense or defense to improve a team’s performance during the season. Overall, after analysis of this information teams can improve their overall rankings and the NCAA tournament finishes. 
+
+# DATA
+
+The data was collected on Kaggle, where a user, Andrew Sundberg, cleaned it up and uploaded it two years ago. Barttorvik.com, a website of T ranks and free statistics of NCAA basketball conferences, collected the data. The dataset aggregates the competition capabilities of Division I college basketball teams across seasons from 2013 to 2021. Twenty-five variables cover different aspects of basketball data. This dataset is thorough enough to analyze basketball trends and predicts future team wins.  
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+D <- read_csv("cbb.csv", 'show_col_types'=FALSE)
+D <- na.omit(D)
+names(D) <- tolower(names(D))
+win.rate = D[,"w"]/D[,"g"] * 100
+D <- cbind(win.rate, D)
+colnames(D)[1] <- c("win.rate")
+df <- D[1:10,]
+df = select(df, "team", "conf", "g", "w", "adjoe", "adjde", "wab", "efg_d", "efg_o", "ftr", "tord", "tor", "orb")
+#EFG_D + TORD + FTRD + FTR + TWOP_D + TOR + EFG_O + ORB
+df %>%
+  kbl() %>%
+  kable_styling()
+```
+
+For my first question, I looked at a team's offense and defense to see what the better predictor of their wins above the bubble would be. I used the variable Adjusted Offensive Efficiency (ADJOE) to measure the basketball team's offense. Adjusted Offensive Efficiency is the number that represents the number of points a team would score per 100 possessions, or trips down the court with the basketball, against an average D1 opponent. The higher this number is, the stronger the team's offensive efficiency.  
+
+On a similar note, Adjusted Defensive Efficiency (ADJDE) is the number of points a team would allow per 100 possessions against an average Division 1 opponent. The lower the number is, the stronger the defensive efficiency of the team since they are better at preventing the other team from scoring points. For AOE and ADE, I have 2455 observations based on the D1 teams from 2013 – 2021.  
+
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE, fig.show='hide'}
+Data <- read_csv("cbb.csv", 'show_col_types'=FALSE)
+
+Data <- na.omit(Data)
+names(Data) <- tolower(names(Data))
+
+power_data <- Data[,c('team','adjoe','barthag')]
+
+power_data <-
+
+ power_data %>%
+
+ arrange((adjoe))
+
+power_data
+ggplot(data = power_data) + geom_point(mapping = aes(x=adjoe, y=barthag))
+
+print(cor.test(power_data$adjoe, power_data$barthag, method=c("pearson")))
+```
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE, fig.show='hide'}
+win.rate = Data[,"w"]/Data[,"g"] * 100
+Data <- cbind(win.rate, Data)
+colnames(Data)[1] <- c("win.rate")
+```
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE, fig.show='hide'}
+outliers <- function(x) {
+
+
+ Q1 <- quantile(x, probs=.25)
+
+ Q3 <- quantile(x, probs=.75)
+
+ iqr = Q3-Q1
+ upper_limit = Q3 + (iqr*1.5)
+
+ lower_limit = Q1 - (iqr*1.5)
+
+
+ x > upper_limit | x < lower_limit
+
+}
+
+remove_outliers <- function(df, cols = names(df)) {
+
+ for (col in cols) {
+
+  df <- df[!outliers(df[[col]]),] 
+  } 
+  df
+}
+```
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE, fig.show='hide'}
+split.data= Data %>%
+        mutate(Set=sample(c("Train", "Test"), nrow(Data), replace=TRUE, prob=c(0.8,0.2)))
+
+train.data<-filter(split.data,Set=="Train")
+test.data<-filter(split.data,Set=="Test")
+```
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE, fig.show='hide'}
+lm.adjoe <- lm(remove_outliers(wab) ~ remove_outliers(adjoe), data = train.data)
+summary(lm.adjoe)
+```
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE, fig.show='hide'}
+lm.adjde <- lm(remove_outliers(wab) ~ remove_outliers(adjoe), data = train.data)
+summary(lm.adjde)
+```
+
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE, fig.show='hide'}
+MAE.func=function(x){
+  MAE = mean(abs(x))
+  return(MAE)}
+```
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE, fig.show='hide'}
+test.data2 <- mutate(test.data, lmadjoe.predict = predict(lm.adjoe, newdata = test.data),
+                     lmadjoe.residuals = wab - lmadjoe.predict,
+                     lmadje.predict = predict(lm.adjde, newdata = test.data),
+                     lmadjde.residuals = wab - lmadje.predict)
+MAE.func(test.data2$lmadjoe.residual)
+MAE.func(test.data2$lmadjde.residuals)
+```
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+a <- ggplot(Data, aes(x= wab, y = adjoe, group = 1)) + geom_boxplot() + ylab("Adjusted Offensive Efficiency") + xlab("Wins Above Bubble")
+b <- ggplot(Data, aes(x= wab, y= adjde, group = 1)) + geom_boxplot() + ylab("Adjusted Defensive Efficiency") + xlab("Wins Above Bubble")
+ggarrange(a, b, ncol=2)
+```
+
+<br>
+My last variable was Wins above Bubble, which is the difference in the number of wins a team has compared to the expected number of wins an average "bubble" team (a team on the cusp of making the postseason) would earn against a given team's schedule. Using wins above the bubble as my success variable helps reduce the variability that comes with different schedules. For example, a team with an easy schedule might have a large number of wins, but their wins above bubble would not be as high due to their easy schedule.  
+
+For Question 2, I wanted to build off my results for Question 1, and see which variables produce the best predictive model for win rate. I chose all the quantitative variables relevant to the question, which were a few variables, like Effective Field Goal Percentage Shot and Free Throw Rate. The 8 variables that had the best predictive model were Effective Field Goal Percentage Allowed, Turnover Percentage Committed (Steal Rate), Free Throw Rate Allowed, Free Throw Rate (How often the given team shoots Free Throws), Two-Point Shooting Percentage Allowed, Turnover Percentage Allowed (Turnover Rate), Effective Field Goal Percentage Shot, Offensive Rebound Rate. 
+
+# RESULTS
+
+One of the main questions I focused on was: Is offensive efficiency or defensive efficiency a better predictor of wins above the bubble? I explored my question by performing Exploratory Data Analysis on the dataset. During the Exploratory Data Analysis process, I assessed correlations between variables and distributions between various basketball statistics and compared teams' pre-covid and post-covid seasons. My results for the pre-covid and post-covid showed that power rating was a better predictor overall of seed placement in the pre-covid years than post-covid years. However, there needed to be more relevant data because the covid pandemic began two years ago for me to state that these results are statistically significant. The results of my Exploratory Data Analysis inspired me to ask: "Is offensive efficiency or defensive efficiency a better predictor of wins above the bubble?". 
+
+First, to visual trends for this question, I decided to create a density plot of the Wins Above Bubble variable. From this histogram, I can see a clear trend where most values are centered slightly to the positive of zero, with most of the data clustered here, meaning that most teams did as they were expected to or slightly better against their schedule. In addition, I can see that the worst a team did was much higher than how much better a team did compare expected.   
+
+
+```{r,  echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+ggplot(Data, aes(x=wab)) + geom_histogram(aes(y=..density..), binwidth=1, color= "black", fill = "white") + geom_density(alpha = 0.2, fill = "#FF6666") + ggtitle("Density Plot - Wins Above Bubble") + xlab("Wins Above Bubble")
+```
+
+To further pursue this question, I built two linear models: one that used adjusted offensive efficiency as a predictor for wins above the bubble and another that used adjusted defensive efficiency. I had to clean and prepare the dataset before building the models. Data cleaning involved renaming column names to fit R's syntax, dropping null values, and changing the data types of various columns.    
+
+After the data cleaning process, I split the data into test and train datasets. Of the original dataset, 80% of the data was assigned to training data, and 20% was assigned to testing data. Once the model was built around the training data, I subtracted the predictions from the actual data. Then I ran a function that computed the Mean Squared Error of the residuals.  
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+outliers <- function(x) {
+
+  Q1 <- quantile(x, probs=.25)
+  Q3 <- quantile(x, probs=.75)
+  iqr = Q3-Q1
+
+ upper_limit = Q3 + (iqr*1.5)
+ lower_limit = Q1 - (iqr*1.5)
+
+ x > upper_limit | x < lower_limit
+}
+
+remove_outliers <- function(df, cols = names(df)) {
+  for (col in cols) {
+    df <- df[!outliers(df[[col]]),]
+  }
+  df
+}
+```
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE, fig.show='hide'}
+Data <- read_csv("cbb.csv", 'show_col_types'=FALSE)
+
+win.rate = Data[,"W"]/Data[,"G"] * 100
+Data <- cbind(win.rate, Data)
+
+Data <- na.omit(Data)
+names(Data) <- tolower(names(Data))
+
+power_data <- Data[,c('team','adjoe','barthag')]
+
+power_data <-
+
+ power_data %>%
+
+ arrange((adjoe))
+
+power_data
+ggplot(data = power_data) + geom_point(mapping = aes(x=adjoe, y=barthag))
+
+print(cor.test(power_data$adjoe, power_data$barthag, method=c("pearson")))
+```
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+colnames(Data)[1] <- c("win.rate")
+new_three_d <- remove_outliers(Data$three_d)
+new_three_o <- remove_outliers(Data$three_o)
+```
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+model <- lm(Data$wab ~ remove_outliers(Data$adjoe))
+summary(model)
+```
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+
+test=c(-5,-2,0,3,5)
+
+MAE.func = function(vector){
+  return (mean(abs(vector)))
+}
+
+MAE.func(test)
+```
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+
+##ADJOE MODEL 1
+new_data <- remove_outliers(Data[,c("adjoe", "wab")])
+Data2<-
+  new_data %>%
+  mutate(Set=sample(c("Train", "Test"), 460, replace = TRUE, prob = c(.8,.2)))
+
+train.bgg<-filter(Data2,Set=="Train")
+test.bgg<-filter(Data2,Set=="Test")
+lm1 = lm(wab ~ adjoe ,data=train.bgg)
+test.bgg2 = test.bgg %>%
+  add_predictions(lm1, var = "Pre1") %>%
+   add_residuals(lm1, var = "Re1")
+MAE.func(test.bgg2[["Re1"]])
+
+ggplot(data = test.bgg2) + geom_point(mapping = aes(x = adjoe, y = wab)) + geom_line(mapping = aes(x = adjoe, y = Pre1, color = "red")) + ggtitle("Model - Adjusted Offensive Efficiency v. Wins Above Bubble") + xlab("Adjusted Offensive Efficiency") + ylab("Wins Above Bubble") + theme(legend.position="none")
+```
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+##ADJDE MODEL 1
+new_data <- remove_outliers(Data[,c("adjde", "wab")])
+Data2<-
+  new_data %>% 
+  mutate(Set=sample(c("Train", "Test"), 458, replace = TRUE, prob = c(.8,.2)))
+
+train.bgg<-filter(Data2,Set=="Train")
+test.bgg<-filter(Data2,Set=="Test")
+lm1 = lm(wab ~ adjde ,data=train.bgg)
+test.bgg2 = test.bgg %>%
+  add_predictions(lm1, var = "Pre1") %>%
+   add_residuals(lm1, var = "Re1")
+MAE.func(test.bgg2[["Re1"]])
+summary(lm1)
+ggplot(data = test.bgg2) + geom_point(mapping = aes(x = adjde, y = wab)) + geom_line(mapping = aes(x = adjde, y = Pre1, color = "red")) + ggtitle("Model - Adjusted Defensive Efficiency v. Wins Above Bubble") + xlab("Adjusted Defensive Efficiency") + ylab("Wins Above Bubble")+ theme(legend.position="none")
+```
+
+Following these models for both offensive and defensive efficiency, I could draw one result: offense and defense are imperative to success. This was because both of my models gave similar results with a mean squared error of around 2.4 and similar beta hat and r squared.
+
+My second question explored what variables (excluding efficiencies) provide the best predictor of a team’s win rate. I decided to delve into this question because coaches generally do not use efficiency variables when predicting the win rate of teams. By exploring more concrete variables, coaches are able to see specifically what they can work on to improve their win rate.  In order to further explore this question, I had to create a new column that divided the wins by the number of games a team played. By narrowing down the variables I can isolate what variables coaches should focus on more in practices to increase their win rate.  
+
+To create a model that predicts a team’s win rate I used a step wise model. I randomly separated 85 percent of the data into the training set and 15 percent into the test set. First, the model started with 17 variables and the step wise model narrowed it down to the 8 most relevant variables of effective field goal defense, turnover rate defense (steals), free throw rate defense, free throw rate, two-point defense, turnover rate, effective field goal offense, and offensive rebounds. 
+
+The mean absolute error when the model was used to predict win rates on the test data was 6.45 percent. This means that the model was on average about 6.45 percent off from the actual win rates. The adjusted R-squared was 0.82. This means that the variables in the stepwise model were able to produce a relatively strong correlation to a team’s win-rate. This indicates that the best possible model that I could create given my data included a mix of both offensive and defensive statistics, and that differing offensive and defensive statistics play a role in determining a team’s win-rate.  
+
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+data = read_csv("cbb2.csv")
+```
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+data$split=sample(x=c("TRAIN","TEST"),size=2455,
+                  replace=T,prob=c(0.85,0.15))
+
+#get training and testing dataset
+train.data = data %>%  filter(split=="TRAIN")
+test.data = data %>% filter(split=="TEST")
+
+```
+
+
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+intercept_only = lm(((W/G) *100) ~ 1, data=data)
+all <- lm(((W/G) * 100) ~ ADJOE+ ADJDE+ EFG_O+EFG_D+TOR+TORD+ORB+DRB+FTR+FTRD+TWOP_O+THREEP_O+THREEP_D+ADJ_T+TWOP_O+TWOP_D, data=data)
+both <- step(intercept_only, direction='both', scope=formula(all), trace=0)
+both$anova
+both$coefficients
+
+step.model = lm(((W/G) *100) ~ EFG_D + TORD + FTRD + FTR + TWOP_D + TOR + EFG_O + ORB, data=data)
+summary(step.model)
+```
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE}
+predictions.step = predict(step.model, test.data)
+ggplot(test.data) + geom_point(aes(x=((W/G) *100),y=predictions.step)) + geom_abline(intercept=0, slope=1, color="red") + xlab("Win Rate") + ylab("Predictions") + ggtitle("Win Rate v. Predictions")
+```
+
+```{r, echo=FALSE, results='hide', message=FALSE, warning=FALSE, fig.show='hide'}
+ggplot(data, aes(ADJDE, ADJOE)) + geom_point() + geom_smooth() + ggtitle("Defensive Efficiency vs. Offensive Efficiency")
+cor(data$ADJDE, data$ADJOE)
+```
+
+# CONCLUSION
+
+My statistical analysis aimed to use different models in order to predict the performance of various basketball teams using known statistics. I first attempted to do this by creating linear regression models using the Offensive and Defensive efficiencies of teams and was able to predict WABs with an MAE of about 2 for both models. Effectively, both Offensive and Defensive models were able to predict a team’s relative performance within 2 wins. This is significant because basketball teams rarely have both a strong offense and defense. The average basketball viewer would likely wonder whether Offense or Defense plays a bigger impact on wins, and the linear models showed that both stats are equally proficient at predicting win outcomes. This is an unusual answer to the age-old question of “offense vs. defense", showing that having a stronger offense vs. defense or vice versa does not necessarily correlate to more wins.   
+
+While this initial model did not utilize every variable available to me, I believe that it is a strong predictor due to the nature of the adjusted offensive and defensive efficiency variables. These variables consider the number of free throws, three-pointers, and two-pointers that a team would score and be scored against, so they are strong representations of a team's offensive and defensive capabilities. This means that if someone was aiming to predict a team’s success considering their current schedule in the real world, focusing on their offense vs. their defense would not offer any predictive advantages. I initially avoided including all of the variables in the dataset so that order to provide a logical explanation for the results of the predictive outcome, but I understood that it is possible to increase the predictive accuracy of the model by including more variables.  
+
+In order to take this research further, I performed a stepwise analysis on the 17 variables included in the data in order to discover the variables that had the best predictive outcomes on a team’s win-rate. I was able to narrow the model down to eight variables of interest with an MAE of about 6% and a strong correlation. This was a relatively strong prediction of a team’s win-rate, since it could average anywhere from 0-100% and is likely affected by the difficulty of their schedule. However, the average viewer who is looking to make basketball predictions would be most likely unable to gather and extrapolate these predictive variables during a regular season, making it harder to utilize in the real world. In the future, statistical researchers could improve this model by appending more gathered statistics from other data sets in order to create an even more accurate model with a lower MAE. In conclusion, predicting basketball outcomes is a difficult task fraught with variability, but a larger dataset with more predictive variables may reduce some of this variability and give us a better insight into how a team will perform. 
